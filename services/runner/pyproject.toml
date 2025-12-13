@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evaluator-runner"
+version = "0.1.0"
+description = "LightEval-based evaluation runner service"
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic>=2.0",
+  "typer>=0.12",
+  "lighteval>=0.11.0",
+]
+
+[project.scripts]
+evaluator-runner = "runner.main:app"
+

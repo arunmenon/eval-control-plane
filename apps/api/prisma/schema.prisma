@@ -1,0 +1,178 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Benchmark {
+  benchmark_id      String   @id @default(uuid())
+  benchmark_key     String   @unique
+  suite             String
+  task_name         String
+  source_type       String
+  scoring_mode      String
+  tags              String?  // JSON-encoded string
+  description       String?
+  hf_repo           String?
+  hf_subset         String?
+  evaluation_splits String?  // JSON-encoded string
+  hf_revision       String?
+  default_fewshot   Int?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @default(now())
+
+  packTasks PackTask[]
+}
+
+model Pack {
+  pack_id      String     @id @default(uuid())
+  name         String
+  version      String
+  description  String?
+  primary_metric String
+  aggregation  String
+  tags         String? // JSON-encoded string
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now())
+
+  packTasks PackTask[]
+  runs      Run[]
+
+  @@unique([name, version], name: "name_version")
+}
+
+model PackTask {
+  pack_task_id String   @id @default(uuid())
+  pack_id      String
+  benchmark_id String
+  task_spec    String
+  fewshot      Int      @default(0)
+  weight       Float    @default(1.0)
+  display_order Int     @default(0)
+  overrides    String   @default("{}") // JSON-encoded string
+
+  pack      Pack      @relation(fields: [pack_id], references: [pack_id], onDelete: Cascade)
+  benchmark Benchmark @relation(fields: [benchmark_id], references: [benchmark_id])
+
+  @@unique([pack_id, task_spec], name: "pack_id_task_spec")
+}
+
+model Plugin {
+  plugin_id        String   @id @default(uuid())
+  name             String
+  plugin_type      String
+  version          String
+  storage_uri      String
+  requirements_txt String?
+  created_at       DateTime @default(now())
+
+  @@unique([name, version])
+}
+
+model JudgeTemplate {
+  template_id     String   @id @default(uuid())
+  name            String
+  version         String
+  prompt_template String
+  response_schema String? // JSON-encoded string
+  created_at      DateTime @default(now())
+
+  @@unique([name, version])
+}
+
+model Run {
+  run_id               String   @id @default(uuid())
+  pack_id              String
+  run_name             String?
+  status               String
+  model_name           String
+  requested_model_name String
+  backend_type         String
+  backend_config       String   @default("{}") // JSON-encoded string
+  max_samples          Int?
+  num_fewshot_seeds    Int      @default(1)
+  save_details         Boolean  @default(false)
+  output_dir           String
+  results_path_template String?
+  scoring_mode         String
+  scoring_config       String   @default("{}") // JSON-encoded string
+  generation_config    String   @default("{}") // JSON-encoded string
+  tags                 String?  // JSON-encoded string
+  notes                String?
+  created_at           DateTime @default(now())
+  started_at           DateTime?
+  finished_at          DateTime?
+
+  pack        Pack          @relation(fields: [pack_id], references: [pack_id])
+  artifacts   RunArtifacts?
+  scores      RunScores?
+  taskMetrics RunTaskMetric[]
+  taskHashes  RunTaskHash[]
+  detailFiles RunDetailFile[]
+}
+
+model RunArtifacts {
+  run_id            String   @id
+  results_json_uri  String
+  details_base_uri  String?
+  logs_uri          String?
+  results_json      String? // JSON-encoded string
+  lighteval_sha     String?
+  model_sha         String?
+  total_eval_seconds Float?
+  created_at        DateTime @default(now())
+
+  run Run @relation(fields: [run_id], references: [run_id], onDelete: Cascade)
+}
+
+model RunScores {
+  run_id           String   @id
+  pack_score       Float?
+  pack_score_stderr Float?
+  all_metrics      String   @default("{}") // JSON-encoded string
+  created_at       DateTime @default(now())
+
+  run Run @relation(fields: [run_id], references: [run_id], onDelete: Cascade)
+}
+
+model RunTaskMetric {
+  run_task_metric_id String   @id @default(uuid())
+  run_id             String
+  task_key           String
+  metric_name        String
+  metric_value       Float?
+
+  run Run @relation(fields: [run_id], references: [run_id], onDelete: Cascade)
+
+  @@unique([run_id, task_key, metric_name])
+}
+
+model RunTaskHash {
+  run_task_hash_id String   @id @default(uuid())
+  run_id           String
+  task_key         String
+  hash_examples    String?
+  hash_full_prompts String?
+  hash_input_tokens String?
+  hash_cont_tokens String?
+
+  run Run @relation(fields: [run_id], references: [run_id], onDelete: Cascade)
+
+  @@unique([run_id, task_key])
+}
+
+model RunDetailFile {
+  run_detail_file_id String   @id @default(uuid())
+  run_id             String
+  task_key           String
+  parquet_uri        String
+  num_rows           Int?
+  created_at         DateTime @default(now())
+
+  run Run @relation(fields: [run_id], references: [run_id], onDelete: Cascade)
+
+  @@unique([run_id, task_key])
+}
