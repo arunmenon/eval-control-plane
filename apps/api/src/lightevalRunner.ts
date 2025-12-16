@@ -99,6 +99,10 @@ async function ingestResults(runId: string, jobSpec: JobSpec): Promise<void> {
   }
 
   if (metricRows.length > 0) {
+    // Idempotent ingestion: clear any existing metrics for this run before inserting.
+    await prisma.runTaskMetric.deleteMany({
+      where: { run_id: runId },
+    });
     await prisma.runTaskMetric.createMany({
       data: metricRows,
     });
@@ -127,6 +131,10 @@ async function ingestResults(runId: string, jobSpec: JobSpec): Promise<void> {
   }
 
   if (hashRows.length > 0) {
+    // Idempotent ingestion: clear any existing hashes for this run before inserting.
+    await prisma.runTaskHash.deleteMany({
+      where: { run_id: runId },
+    });
     await prisma.runTaskHash.createMany({
       data: hashRows,
     });
@@ -192,7 +200,7 @@ async function ingestResults(runId: string, jobSpec: JobSpec): Promise<void> {
       }
       const withoutPrefix = filename.slice("details_".length, -".parquet".length);
       const parts = withoutPrefix.split("_");
-      const taskKey = parts[0];
+      const taskKey = parts.length > 1 ? parts.slice(0, -1).join("_") : withoutPrefix;
 
       detailRows.push({
         run_id: runId,
@@ -203,11 +211,23 @@ async function ingestResults(runId: string, jobSpec: JobSpec): Promise<void> {
     }
 
     if (detailRows.length > 0) {
+      // Idempotent ingestion: clear any existing detail file rows for this run before inserting.
+      await prisma.runDetailFile.deleteMany({
+        where: { run_id: runId },
+      });
       await prisma.runDetailFile.createMany({
         data: detailRows,
       });
     }
   }
+}
+
+function normalizeTaskSpec(id: string, fewshot: number): string {
+  // If the id already ends with "|<int>", trust it as a fully formed LightEval task key.
+  if (/\|\d+$/.test(id)) {
+    return id;
+  }
+  return `${id}|${fewshot}`;
 }
 
 export async function runLightEvalForRun(runId: string, jobSpec: JobSpec): Promise<void> {
@@ -254,7 +274,7 @@ export async function runLightEvalForRun(runId: string, jobSpec: JobSpec): Promi
     }
   }
 
-  const tasksArg = jobSpec.tasks.map((t) => `${t.id}|${t.fewshot}`).join(",");
+  const tasksArg = jobSpec.tasks.map((t) => normalizeTaskSpec(t.id, t.fewshot)).join(",");
 
   const args: string[] = [
     "eval",

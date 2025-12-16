@@ -13,7 +13,7 @@ Status here refers to **implementation in the codebase**, not the ADR’s own de
 
 ## ADRs
 
-| ADR ID  | Title                                                                 | Implementation status |
+| ADR ID | Title                                                                 | Implementation status |
 |--------|-----------------------------------------------------------------------|-----------------------|
 | 0001   | Record architecture decisions                                         | Implemented           |
 | 0002   | LightEval integration via CLI-first runner                            | Implemented           |
@@ -37,5 +37,9 @@ Status here refers to **implementation in the codebase**, not the ADR’s own de
 | 0020   | Benchmark detail tabs                                                 | Implemented           |
 | 0021   | Conversation agents – benchmarks, packs, and metrics                  | Implemented           |
 | 0022   | Conversation Core v1 pack from multi-turn traces                      | Implemented           |
+| 0023   | Home breakdown widgets – scoring modes and backends                   | Implemented           |
+| 0024   | UI component kit and dashboard/run detail layout upgrades             | Implemented           |
+| 0025   | Leaderboard comparability, reproducibility, and baseline deltas       | Implemented           |
+| 0026   | Conversation Core v1 dataset wiring to multi_turn_traces_eval.jsonl   | In progress           |
 
 Update this table as implementation progresses, and cross-reference specific modules, services, or migrations where relevant.

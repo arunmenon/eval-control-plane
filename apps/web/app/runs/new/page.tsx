@@ -100,7 +100,8 @@ export default function NewRunPage() {
         },
         tasks,
         artifacts: {
-          output_dir: `/tmp/evaluator-runs/${selectedPackId}`,
+          // Include a timestamp component so each run writes to a unique artifact directory.
+          output_dir: `/tmp/evaluator-runs/${selectedPackId}/${Date.now()}`,
           save_details: true,
         },
         scoring_mode: scoringMode,

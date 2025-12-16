@@ -25,10 +25,14 @@ export default async function PacksPage() {
           <p>
             Primary metric: <strong>{p.primaryMetric}</strong> · Tasks: {p.taskCount}
           </p>
-          <p>
-            <a href={`/leaderboards/${p.packId}`}>View leaderboard</a> ·{" "}
-            <a href={`/runs/new?packId=${p.packId}`}>Run this pack</a>
-          </p>
+          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
+            <a href={`/runs/new?packId=${p.packId}`} className="button button-primary">
+              Run this pack
+            </a>
+            <a href={`/leaderboards/${p.packId}`} className="button button-secondary">
+              View leaderboard
+            </a>
+          </div>
         </article>
       ))}
       {packs.length === 0 && <p className="muted">No packs found.</p>}

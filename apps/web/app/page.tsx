@@ -31,17 +31,42 @@ async function fetchSummary() {
     .sort((a, b) => b.runCount - a.runCount)
     .slice(0, 3);
 
+  const scoringCounts: Record<string, number> = { deterministic: 0, judge: 0, jury: 0 };
+  const backendCounts: Record<string, number> = {};
+
+  for (const r of runs) {
+    if (typeof r.scoring_mode === "string") {
+      const key = r.scoring_mode as string;
+      if (key in scoringCounts) {
+        scoringCounts[key] += 1;
+      }
+    }
+    if (typeof r.backend_type === "string") {
+      backendCounts[r.backend_type] = (backendCounts[r.backend_type] ?? 0) + 1;
+    }
+  }
+
   return {
     packCount: packs.length ?? 0,
     runCount: runs.length ?? 0,
     completedRunCount: (completedData.runs ?? []).length ?? 0,
     recentRuns,
     topPacks,
+    scoringCounts,
+    backendCounts,
   };
 }
 
 export default async function HomePage() {
-  const { packCount, runCount, completedRunCount, recentRuns, topPacks } = await fetchSummary();
+  const {
+    packCount,
+    runCount,
+    completedRunCount,
+    recentRuns,
+    topPacks,
+    scoringCounts,
+    backendCounts,
+  } = await fetchSummary();
 
   return (
     <section>
@@ -55,8 +80,12 @@ export default async function HomePage() {
             </p>
           </div>
           <div className="hero-actions">
-            <a href="/runs/new">Launch run</a>
-            <a href="/packs">Open packs</a>
+            <a href="/runs/new" className="button button-primary">
+              Launch run
+            </a>
+            <a href="/packs" className="button button-secondary">
+              Browse packs
+            </a>
           </div>
         </div>
         <div className="hero-grid">
@@ -80,15 +109,30 @@ export default async function HomePage() {
           {recentRuns.length === 0 ? (
             <p className="muted">No runs yet. Launch your first evaluation.</p>
           ) : (
-            <ul>
-              {recentRuns.map((r: any) => (
-                <li key={r.run_id}>
-                  <a href={`/runs/${r.run_id}`}>{r.run_name ?? r.run_id}</a> ·{" "}
-                  <span>{r.status}</span> ·{" "}
-                  <span>{r.scores?.pack_score != null ? `score ${r.scores.pack_score}` : "no score yet"}</span>
-                </li>
-              ))}
-            </ul>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Status</th>
+                  <th>Score</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentRuns.map((r: any) => (
+                  <tr key={r.run_id}>
+                    <td>
+                      <a href={`/runs/${r.run_id}`}>{r.run_name ?? r.run_id}</a>
+                    </td>
+                    <td>
+                      <span className="pill">{r.status}</span>
+                    </td>
+                    <td>{r.scores?.pack_score != null ? r.scores.pack_score : "–"}</td>
+                    <td>{r.created_at ? new Date(r.created_at).toLocaleString() : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
         <div className="card">
@@ -96,15 +140,82 @@ export default async function HomePage() {
           {topPacks.length === 0 ? (
             <p className="muted">No packs yet. Create a pack to define what you care about.</p>
           ) : (
-            <ul>
+            <div className="stat-grid">
               {topPacks.map((p: any) => (
-                <li key={p.packId}>
-                  <a href={`/packs/${p.packId}`}>{p.name}</a> <span className="muted">v{p.version}</span> ·{" "}
-                  <span className="muted">{p.runCount} run(s)</span> ·{" "}
-                  <a href={`/leaderboards/${p.packId}`}>leaderboard</a>
-                </li>
+                <div key={p.packId} className="stat-card">
+                  <p className="stat-label">Pack</p>
+                  <p className="stat-value">
+                    {p.name} <span className="muted" style={{ fontSize: "0.8rem" }}>v{p.version}</span>
+                  </p>
+                  <p className="stat-subtext">{p.runCount} run{p.runCount === 1 ? "" : "s"}</p>
+                  <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
+                    <a href={`/leaderboards/${p.packId}`} className="button button-secondary" style={{ fontSize: "0.75rem", padding: "0.3rem 0.6rem" }}>
+                      Leaderboard
+                    </a>
+                    <a href={`/runs/new?packId=${p.packId}`} className="button button-primary" style={{ fontSize: "0.75rem", padding: "0.3rem 0.6rem" }}>
+                      Run
+                    </a>
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,2fr) minmax(0,2fr)", gap: "1rem", marginTop: "1.5rem" }}>
+        <div className="card">
+          <h3>Scoring modes</h3>
+          {runCount === 0 ? (
+            <p className="muted">No runs yet. Scoring breakdown will appear here.</p>
+          ) : (
+            <div className="bar-list">
+              {(["deterministic", "judge", "jury"] as const).map((key) => {
+                const count = scoringCounts[key];
+                const percentage = runCount > 0 ? Math.round((count / runCount) * 100) : 0;
+                const label =
+                  key === "deterministic" ? "Deterministic" : key === "judge" ? "Judge" : "Jury";
+                return (
+                  <div key={key} className="bar-list-row">
+                    <div className="bar-list-label">{label}</div>
+                    <div className="bar-list-bar">
+                      <div className="bar-list-bar-fill" style={{ width: `${percentage}%` }} />
+                    </div>
+                    <div className="bar-list-value">
+                      {count} ({percentage}%)
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="card">
+          <h3>Backends</h3>
+          {runCount === 0 ? (
+            <p className="muted">No runs yet. Backend usage will appear here.</p>
+          ) : (
+            <>
+              {Object.keys(backendCounts).length === 0 ? (
+                <p className="muted">No backend data yet.</p>
+              ) : (
+                <div className="bar-list">
+                  {Object.entries(backendCounts).map(([backend, count]) => {
+                    const percentage = runCount > 0 ? Math.round((count / runCount) * 100) : 0;
+                    return (
+                      <div key={backend} className="bar-list-row">
+                        <div className="bar-list-label">{backend}</div>
+                        <div className="bar-list-bar">
+                          <div className="bar-list-bar-fill" style={{ width: `${percentage}%` }} />
+                        </div>
+                        <div className="bar-list-value">
+                          {count} ({percentage}%)
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

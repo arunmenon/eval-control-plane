@@ -5,6 +5,15 @@ import { runLightEvalForRun } from "./lightevalRunner";
 import { readParquetRows } from "./parquetReader";
 import { inspectLightevalTask } from "./lightevalTasks";
 
+function safeParseJson<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function registerRoutes(app: FastifyInstance) {
   app.get("/health", async () => {
     return { status: "ok" };
@@ -58,7 +67,7 @@ export async function registerRoutes(app: FastifyInstance) {
     }
 
     try {
-      const inspect = await inspectLightevalTask(benchmark.benchmark_key);
+      const inspect = await inspectLightevalTask(benchmark.task_name);
       return { benchmark, inspect };
     } catch (err) {
       // Fallback to DB snapshot if inspect fails.
@@ -158,7 +167,21 @@ export async function registerRoutes(app: FastifyInstance) {
       },
     });
 
-    return { runs };
+    const items = runs.map((r) => ({
+      ...r,
+      backend_config: safeParseJson(r.backend_config, {}),
+      scoring_config: safeParseJson(r.scoring_config, {}),
+      generation_config: safeParseJson(r.generation_config, {}),
+      tags: safeParseJson(r.tags, [] as string[]),
+      scores: r.scores
+        ? {
+            ...r.scores,
+            all_metrics: safeParseJson(r.scores.all_metrics, {}),
+          }
+        : null,
+    }));
+
+    return { runs: items };
   });
 
   app.get("/api/runs/:runId", async (request, reply) => {
@@ -181,7 +204,72 @@ export async function registerRoutes(app: FastifyInstance) {
       return { error: "Run not found" };
     }
 
-    return { run };
+    // Compute reproducibility: all task hashes present and non-null for this run.
+    const hashes = run.taskHashes ?? [];
+    const hasAnyHashes = hashes.length > 0;
+    const allTasksHaveHashes =
+      hasAnyHashes &&
+      hashes.every(
+        (h) =>
+          !!h.hash_examples &&
+          !!h.hash_full_prompts &&
+          !!h.hash_input_tokens &&
+          !!h.hash_cont_tokens,
+      );
+
+    // Compute baseline within this pack and scoring mode (earliest completed run).
+    let baselineScore: number | null = null;
+    let deltaFromBaseline: number | null = null;
+    let isComparable = false;
+
+    if (run.pack_id && run.scoring_mode) {
+      const baselineRun = await prisma.run.findFirst({
+        where: {
+          pack_id: run.pack_id,
+          scoring_mode: run.scoring_mode,
+          status: "completed",
+          scores: {
+            isNot: null,
+          },
+        },
+        orderBy: { created_at: "asc" },
+        include: { scores: true },
+      });
+
+      if (baselineRun?.scores?.pack_score !== null && baselineRun?.scores?.pack_score !== undefined) {
+        baselineScore = baselineRun.scores.pack_score;
+        if (run.scores?.pack_score !== null && run.scores?.pack_score !== undefined) {
+          deltaFromBaseline = run.scores.pack_score - baselineScore;
+          isComparable = true;
+        }
+      }
+    }
+
+    const transformed = {
+      ...run,
+      backend_config: safeParseJson(run.backend_config, {}),
+      scoring_config: safeParseJson(run.scoring_config, {}),
+      generation_config: safeParseJson(run.generation_config, {}),
+      tags: safeParseJson(run.tags, [] as string[]),
+      artifacts: run.artifacts
+        ? {
+            ...run.artifacts,
+            results_json: safeParseJson(run.artifacts.results_json, null),
+          }
+        : null,
+      scores: run.scores
+        ? {
+            ...run.scores,
+            all_metrics: safeParseJson(run.scores.all_metrics, {}),
+          }
+        : null,
+      isReproducible: allTasksHaveHashes,
+      baselineScore,
+      deltaFromBaseline,
+      isComparable,
+    };
+
+    return { run: transformed };
   });
 
   app.get("/api/leaderboards/:packId", async (request, reply) => {
@@ -207,28 +295,73 @@ export async function registerRoutes(app: FastifyInstance) {
       },
       include: {
         scores: true,
+        taskHashes: true,
       },
     });
 
-    const leaderboard = runs
-      .filter((r) => r.scores?.pack_score !== null && r.scores?.pack_score !== undefined)
+    const completedWithScores = runs.filter(
+      (r) => r.scores?.pack_score !== null && r.scores?.pack_score !== undefined,
+    );
+
+    // Baseline for leaderboard: earliest completed run with a pack score.
+    let baselineScore: number | null = null;
+    let baselineScoringMode: string | null = null;
+    if (completedWithScores.length > 0) {
+      const sortedByCreated = [...completedWithScores].sort(
+        (a, b) => a.created_at.getTime() - b.created_at.getTime(),
+      );
+      const baseline = sortedByCreated[0];
+      baselineScore = baseline.scores?.pack_score ?? null;
+      baselineScoringMode = baseline.scoring_mode;
+    }
+
+    const leaderboard = completedWithScores
       .sort((a, b) => {
         const aScore = a.scores?.pack_score ?? 0;
         const bScore = b.scores?.pack_score ?? 0;
         return bScore - aScore;
       })
-      .map((r, index) => ({
-        rank: index + 1,
-        runId: r.run_id,
-        modelName: r.model_name,
-        packScore: r.scores?.pack_score,
-        packScoreStderr: r.scores?.pack_score_stderr,
-        scoringMode: r.scoring_mode,
-        backendType: r.backend_type,
-        createdAt: r.created_at,
-      }));
+      .map((r, index) => {
+        const score = r.scores?.pack_score ?? null;
+        const deltaFromBaseline =
+          baselineScore !== null && score !== null ? score - baselineScore : null;
 
-    return { packId: pack.pack_id, primaryMetric: pack.primary_metric, leaderboard };
+        const hashes = r.taskHashes ?? [];
+        const hasAnyHashes = hashes.length > 0;
+        const allTasksHaveHashes =
+          hasAnyHashes &&
+          hashes.every(
+            (h) =>
+              !!h.hash_examples &&
+              !!h.hash_full_prompts &&
+              !!h.hash_input_tokens &&
+              !!h.hash_cont_tokens,
+          );
+
+        const isComparable =
+          baselineScoringMode !== null && r.scoring_mode === baselineScoringMode;
+
+        return {
+          rank: index + 1,
+          runId: r.run_id,
+          modelName: r.model_name,
+          packScore: score,
+          packScoreStderr: r.scores?.pack_score_stderr,
+          scoringMode: r.scoring_mode,
+          backendType: r.backend_type,
+          createdAt: r.created_at,
+          isReproducible: allTasksHaveHashes,
+          isComparable,
+          deltaFromBaseline,
+        };
+      });
+
+    return {
+      packId: pack.pack_id,
+      primaryMetric: pack.primary_metric,
+      baselineScore,
+      leaderboard,
+    };
   });
 
   app.get("/api/runs/:runId/tasks/:taskKey/details", async (request, reply) => {

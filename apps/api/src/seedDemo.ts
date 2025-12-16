@@ -249,10 +249,10 @@ async function main() {
       scoring_mode: "deterministic",
       tags: JSON.stringify(["conversation", "routing"]),
       description: "Conversation intent routing accuracy (demo seed).",
-      hf_repo: null,
-      hf_subset: null,
-      evaluation_splits: JSON.stringify([]),
-      hf_revision: "demo",
+      hf_repo: "local:multi_turn_traces_eval",
+      hf_subset: "default",
+      evaluation_splits: JSON.stringify(["eval"]),
+      hf_revision: "v1",
       default_fewshot: 0,
     },
   });
@@ -268,10 +268,10 @@ async function main() {
       scoring_mode: "deterministic",
       tags: JSON.stringify(["conversation", "tools"]),
       description: "Conversation tool routing and call structure (demo seed).",
-      hf_repo: null,
-      hf_subset: null,
-      evaluation_splits: JSON.stringify([]),
-      hf_revision: "demo",
+      hf_repo: "local:multi_turn_traces_eval",
+      hf_subset: "default",
+      evaluation_splits: JSON.stringify(["eval"]),
+      hf_revision: "v1",
       default_fewshot: 0,
     },
   });
@@ -287,10 +287,10 @@ async function main() {
       scoring_mode: "judge",
       tags: JSON.stringify(["conversation", "helpfulness"]),
       description: "Judge-based conversation helpfulness and overall quality (demo seed).",
-      hf_repo: null,
-      hf_subset: null,
-      evaluation_splits: JSON.stringify([]),
-      hf_revision: "demo",
+      hf_repo: "local:multi_turn_traces_eval",
+      hf_subset: "default",
+      evaluation_splits: JSON.stringify(["eval"]),
+      hf_revision: "v1",
       default_fewshot: 0,
     },
   });
@@ -318,7 +318,9 @@ async function main() {
       fewshot: 0,
       weight: 1.0,
       display_order: 0,
-      overrides: "{}",
+      overrides: JSON.stringify({
+        dataset_path: "../reasoning-model-trainer/examples/multi_turn_traces_eval.jsonl",
+      }),
     },
   });
 
@@ -332,7 +334,9 @@ async function main() {
       fewshot: 0,
       weight: 1.0,
       display_order: 1,
-      overrides: "{}",
+      overrides: JSON.stringify({
+        dataset_path: "../reasoning-model-trainer/examples/multi_turn_traces_eval.jsonl",
+      }),
     },
   });
 
@@ -346,7 +350,9 @@ async function main() {
       fewshot: 0,
       weight: 1.0,
       display_order: 2,
-      overrides: "{}",
+      overrides: JSON.stringify({
+        dataset_path: "../reasoning-model-trainer/examples/multi_turn_traces_eval.jsonl",
+      }),
     },
   });
 

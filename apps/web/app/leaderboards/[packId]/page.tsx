@@ -3,7 +3,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000"
 async function fetchLeaderboard(packId: string) {
   const res = await fetch(`${API_BASE}/api/leaderboards/${packId}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Leaderboard not found");
-  return res.json() as Promise<{ packId: string; primaryMetric: string; leaderboard: any[] }>;
+  return res.json() as Promise<{
+    packId: string;
+    primaryMetric: string;
+    baselineScore: number | null;
+    leaderboard: any[];
+  }>;
 }
 
 function scoringBadge(mode: string) {
@@ -28,6 +33,12 @@ export default async function LeaderboardPage({ params }: LeaderboardPageProps) 
       <p className="muted">
         Primary metric: <strong>{data.primaryMetric}</strong>. Higher is better unless specified otherwise.
       </p>
+      {data.baselineScore !== null && (
+        <p className="muted">
+          Baseline pack score: <strong>{data.baselineScore}</strong> (earliest completed run). Deltas are shown relative
+          to this baseline.
+        </p>
+      )}
       <table className="table">
         <thead>
           <tr>
@@ -35,6 +46,8 @@ export default async function LeaderboardPage({ params }: LeaderboardPageProps) 
             <th>Run</th>
             <th>Model</th>
             <th>Score</th>
+            <th>Δ vs baseline</th>
+            <th>Badges</th>
             <th>Scoring</th>
             <th>Backend</th>
             <th>Run time</th>
@@ -49,6 +62,23 @@ export default async function LeaderboardPage({ params }: LeaderboardPageProps) 
               </td>
               <td>{entry.modelName}</td>
               <td>{entry.packScore}</td>
+              <td>
+                {entry.deltaFromBaseline !== null && entry.deltaFromBaseline !== 0
+                  ? entry.deltaFromBaseline > 0
+                    ? `+${entry.deltaFromBaseline.toFixed(3)}`
+                    : entry.deltaFromBaseline.toFixed(3)
+                  : "–"}
+              </td>
+              <td>
+                {entry.isReproducible && (
+                  <span className="badge badge-default" style={{ marginRight: "0.25rem" }}>
+                    Reproducible
+                  </span>
+                )}
+                {entry.isComparable && (
+                  <span className="badge badge-default">Comparable</span>
+                )}
+              </td>
               <td>{scoringBadge(entry.scoringMode)}</td>
               <td>{entry.backendType}</td>
               <td>{new Date(entry.createdAt).toLocaleString()}</td>
